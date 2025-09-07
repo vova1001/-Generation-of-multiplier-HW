@@ -36,15 +36,30 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func generateMultiplier(rtp float64) float64 {
-	if rtp < 0.01 {
-		rtp = 0.01
-	}
-	if rtp > 1.0 {
-		rtp = 1.0
-	}
+
+	// При значениях близких к 1, коф "k" сильно расходился из-за чего этот метод исключили
+
+	// keyRTP := []float64{0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 0.99}
+	// keyK := []float64{2.1, 2.79, 3.57, 4.56, 5.859, 7.65, 10.699, 10.741, 35.9, 408}
+
+	// var k float64
+
+	// // Интерполяция k
+	// if rtp <= keyRTP[0] {
+	// 	k = keyK[0]
+	// } else if rtp >= keyRTP[len(keyRTP)-1] {
+	// 	k = keyK[len(keyK)-1]
+	// } else {
+	// 	for i := 0; i < len(keyRTP)-1; i++ {
+	// 		if rtp >= keyRTP[i] && rtp <= keyRTP[i+1] {
+	// 			t := (rtp - keyRTP[i]) / (keyRTP[i+1] - keyRTP[i])
+	// 			k = keyK[i] + t*(keyK[i+1]-keyK[i])
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	var k float64
-
 	// Диапазон 0.1-0.2
 	if rtp >= 0.10 && rtp < 0.20 {
 		for i := 10; i <= 19; i++ {
@@ -341,9 +356,6 @@ func generateMultiplier(rtp float64) float64 {
 	// Генерация мультипликатора
 	rawMult := 1.0 + rand.Float64()*(10000.0-1.0)
 	scale := math.Pow(rtp, k)
-	if scale < 0.0001 {
-		scale = 0.0001
-	}
 	mult := 1.0 + (rawMult-1.0)*scale
 	return mult
 }
