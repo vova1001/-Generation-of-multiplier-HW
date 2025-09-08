@@ -36,78 +36,37 @@ func handleGet(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(resp)
 }
 
-func getK(rtp float64) float64 {
-	// Таблица точных значений (десятые + 0.99)
-	points := []struct {
-		rtp float64
-		k   float64
-	}{
-		{0.1, 2.1},
-		{0.2, 2.79},
-		{0.3, 3.57},
-		{0.4, 4.56},
-		{0.5, 5.859},
-		{0.6, 7.65},
-		{0.7, 10.9},
-		{0.8, 17.15},
-		{0.9, 35.8},
-		{0.99, 370},
-	}
-
-	// Если rtp ≤ минимального значения
-	if rtp <= points[0].rtp {
-		return points[0].k
-	}
-	// Если rtp ≥ максимального значения
-	if rtp >= points[len(points)-1].rtp {
-		return points[len(points)-1].k
-	}
-
-	// Находим соседние точки
-	var lower, upper struct{ rtp, k float64 }
-	for i := 0; i < len(points)-1; i++ {
-		if rtp >= points[i].rtp && rtp <= points[i+1].rtp {
-			lower = points[i]
-			upper = points[i+1]
-			break
-		}
-	}
-
-	// Логарифмическая интерполяция
-	L0 := lower.k * math.Log(lower.rtp)
-	L1 := upper.k * math.Log(upper.rtp)
-	t := (rtp - lower.rtp) / (upper.rtp - lower.rtp)
-	L := L0 + t*(L1-L0)
-	k := L / math.Log(rtp)
-	return k
-}
-
 func generateMultiplier(rtp float64) float64 {
 	rand.Seed(time.Now().UnixNano())
 
 	// Ограничение RTP
-	if rtp < 0.01 {
-		rtp = 0.01
+	if rtp <= 0 {
+		rtp = 0.000001
 	}
-	if rtp > 1.0 {
+	if rtp >= 1.0 {
 		rtp = 1.0
 	}
 
 	// Спец. случай rtp == 1.0
 	if rtp == 1.0 {
 		rawMult := 1.0 + rand.Float64()*(10000.0-1.0)
-		scale := 0.025
+		scale := 0.025 // сжатие к 1
 		return 1.0 + (rawMult-1.0)*scale
 	}
 
-	// Вычисляем k
-	k := getK(rtp)
+	// Целевая средняя (targetScale) для мультипликатора
+	targetScale := rtp
 
-	// Генерация мультипликатора
+	// Вычисляем k динамически, чтобы scale ~= targetScale
+	// scale = rtp^k => k = ln(targetScale)/ln(rtp)
+	k := math.Log(targetScale) / math.Log(rtp)
+
+	// Генерация raw multiplier
 	rawMult := 1.0 + rand.Float64()*(10000.0-1.0)
+
+	// Масштабирование
 	scale := math.Pow(rtp, k)
-	if scale < 0.0001 {
-		scale = 0.0001
-	}
-	return 1.0 + (rawMult-1.0)*scale
+	mult := 1.0 + (rawMult-1.0)*scale
+
+	return mult
 }
