@@ -4,10 +4,8 @@ import (
 	"encoding/json"
 	"flag"
 	"log"
-	"math"
 	"math/rand"
 	"net/http"
-	"time"
 )
 
 type Response struct {
@@ -30,43 +28,58 @@ func main() {
 }
 
 func handleGet(w http.ResponseWriter, r *http.Request) {
-	multiplier := generateMultiplier(rtp)
+	multiplier := sampleMultiplier(rtp)
 	resp := Response{Result: multiplier}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
 
-func generateMultiplier(rtp float64) float64 {
-	rand.Seed(time.Now().UnixNano())
+const (
+	MinM = 1.0
+	MaxM = 10000.0
+)
 
-	// Ограничение RTP
+// sampleMultiplier возвращает случайный множитель [1, 10000].
+// Распределение:
+// - Zone1: число 1 с вероятностью 1-rtp
+// - Zone2: континуум по формуле 1/m², вероятность rtp*(1-1/MaxM)
+// - Zone3: число 10000 с очень маленькой вероятностью rtp/MaxM
+func sampleMultiplier(rtp float64) float64 {
 	if rtp <= 0 {
-		rtp = 0.000001
+		return MinM
 	}
-	if rtp >= 1.0 {
-		rtp = 1.0
-	}
-
-	// Спец. случай rtp == 1.0
-	if rtp == 1.0 {
-		rawMult := 1.0 + rand.Float64()*(10000.0-1.0)
-		scale := 0.025 // сжатие к 1
-		return 1.0 + (rawMult-1.0)*scale
+	if rtp > 1 {
+		rtp = 1
 	}
 
-	// Целевая средняя (targetScale) для мультипликатора
-	targetScale := rtp
+	// Генерация случайного числа
+	u := rand.Float64()
 
-	// Вычисляем k динамически, чтобы scale ~= targetScale
-	// scale = rtp^k => k = ln(targetScale)/ln(rtp)
-	k := math.Log(targetScale) / math.Log(rtp)
+	// Определяем массы для каждой зоны
+	massZone1 := 1.0 - rtp
+	massZone2 := rtp * (1.0 - 1.0/MaxM)
+	// massZone3 = rtp / MaxM (оставшаяся вероятность)
 
-	// Генерация raw multiplier
-	rawMult := 1.0 + rand.Float64()*(10000.0-1.0)
+	// Zone1: возвращаем 1
+	if u < massZone1 {
+		return MinM
+	}
+	u -= massZone1
 
-	// Масштабирование
-	scale := math.Pow(rtp, k)
-	mult := 1.0 + (rawMult-1.0)*scale
+	// Zone2: континуум 1/m²
+	if u < massZone2 {
+		u2 := u / massZone2          // нормализуем в диапазон [0,1)
+		den := 1.0 - u2*(1.0-1/MaxM) // вспомогательная переменная
+		m := 1.0 / den
+		if m < MinM {
+			m = MinM
+		}
+		if m > MaxM {
+			m = MaxM
+		}
+		return m
+	}
 
-	return mult
+	// Zone3: возвращаем 10000
+	return MaxM
 }
