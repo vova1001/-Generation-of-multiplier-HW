@@ -39,11 +39,8 @@ const (
 	MaxM = 10000.0
 )
 
-// sampleMultiplier возвращает случайный множитель [1, 10000].
-// Распределение:
-// - Zone1: число 1 с вероятностью 1-rtp
-// - Zone2: континуум по формуле 1/m², вероятность rtp*(1-1/MaxM)
-// - Zone3: число 10000 с очень маленькой вероятностью rtp/MaxM
+// sampleMultiplier возвращает множитель [1,10000]
+// с плавным переходом между зонами
 func sampleMultiplier(rtp float64) float64 {
 	if rtp <= 0 {
 		return MinM
@@ -52,24 +49,29 @@ func sampleMultiplier(rtp float64) float64 {
 		rtp = 1
 	}
 
-	// Генерация случайного числа
 	u := rand.Float64()
 
-	// Определяем массы для каждой зоны
-	massZone1 := 1.0 - rtp
-	massZone2 := rtp * (1.0 - 1.0/MaxM)
-	// massZone3 = rtp / MaxM (оставшаяся вероятность)
+	// "сырые" веса для зон
+	w1 := 1.0 - rtp  // для Zone1
+	w2 := rtp        // для Zone2
+	w3 := rtp / MaxM // для Zone3 (очень маленький)
 
-	// Zone1: возвращаем 1
+	// нормализуем веса, чтобы сумма = 1
+	sum := w1 + w2 + w3
+	massZone1 := w1 / sum
+	massZone2 := w2 / sum
+	// massZone3 = w3 / sum (оставшаяся вероятность)
+
+	// --- Zone1 ---
 	if u < massZone1 {
 		return MinM
 	}
 	u -= massZone1
 
-	// Zone2: континуум 1/m²
+	// --- Zone2 ---
 	if u < massZone2 {
-		u2 := u / massZone2          // нормализуем в диапазон [0,1)
-		den := 1.0 - u2*(1.0-1/MaxM) // вспомогательная переменная
+		u2 := u / massZone2
+		den := 1.0 - u2*(1.0-1.0/MaxM)
 		m := 1.0 / den
 		if m < MinM {
 			m = MinM
@@ -80,6 +82,6 @@ func sampleMultiplier(rtp float64) float64 {
 		return m
 	}
 
-	// Zone3: возвращаем 10000
+	// --- Zone3 ---
 	return MaxM
 }
